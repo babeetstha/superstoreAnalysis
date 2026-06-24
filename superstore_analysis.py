@@ -90,6 +90,7 @@ def _write_analytical_report(df: pd.DataFrame, output_path: Path) -> None:
 
 
 def _write_data_mining_findings(df: pd.DataFrame, output_path: Path) -> None:
+    # Slightly negative lower bound ensures exact 0 discounts are included in the "0%" bucket.
     discount_bins = pd.cut(
         df["Discount"], bins=[-0.001, 0, 0.1, 0.2, 0.3, 1.0], labels=["0%", "1-10%", "11-20%", "21-30%", ">30%"]
     )
@@ -102,14 +103,14 @@ def _write_data_mining_findings(df: pd.DataFrame, output_path: Path) -> None:
 
     product_sales = df.groupby("Product Name", as_index=False)["Sales"].sum().sort_values("Sales", ascending=False)
     product_sales["cum_sales_pct"] = product_sales["Sales"].cumsum() / product_sales["Sales"].sum() * 100
-    pareto_80_count = int((product_sales["cum_sales_pct"] <= 80).sum())
+    pareto_product_count = int((product_sales["cum_sales_pct"] <= 80).sum())
 
     segment_profitability = (
         df.groupby("Segment", as_index=False)[["Sales", "Profit"]]
         .sum()
         .assign(MarginPct=lambda x: (x["Profit"] / x["Sales"] * 100).round(2))
     )
-    corr = df[["Discount", "Profit"]].corr().iloc[0, 1]
+    corr = df[["Discount", "Profit"]].corr().loc["Discount", "Profit"]
 
     lines = [
         "# Data Mining Findings – Global Superstore",
@@ -127,7 +128,7 @@ def _write_data_mining_findings(df: pd.DataFrame, output_path: Path) -> None:
         [
             "",
             "## 2) Pareto Concentration (Sales)",
-            f"- Number of products contributing ~80% of sales: **{pareto_80_count}**",
+            f"- Number of products contributing ~80% of sales: **{pareto_product_count}**",
             "",
             "## 3) Segment Profitability Mining",
         ]
