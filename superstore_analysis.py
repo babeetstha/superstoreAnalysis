@@ -25,11 +25,17 @@ def _prepare_data(path: Path) -> pd.DataFrame:
     return df
 
 
+def _safe_ratio(numerator: float, denominator: float) -> float:
+    return float(numerator / denominator) if denominator else 0.0
+
+
 def _kpis(df: pd.DataFrame) -> dict[str, float]:
+    total_sales = float(df["Sales"].sum())
+    total_profit = float(df["Profit"].sum())
     return {
-        "total_sales": float(df["Sales"].sum()),
-        "total_profit": float(df["Profit"].sum()),
-        "profit_margin_pct": float((df["Profit"].sum() / df["Sales"].sum()) * 100),
+        "total_sales": total_sales,
+        "total_profit": total_profit,
+        "profit_margin_pct": _safe_ratio(total_profit, total_sales) * 100,
         "avg_discount_pct": float(df["Discount"].mean() * 100),
         "avg_ship_days": float(df["Ship Days"].mean()),
         "order_count": int(df["Order ID"].nunique()),
@@ -115,13 +121,17 @@ def _write_data_mining_findings(df: pd.DataFrame, output_path: Path) -> None:
         .sum()
         .assign(MarginPct=lambda x: (x["Profit"] / x["Sales"] * 100).round(2))
     )
-    corr = df[["Discount", "Profit"]].corr().loc["Discount", "Profit"]
+    corr_data = df[["Discount", "Profit"]].dropna()
+    if len(corr_data) >= 2 and corr_data["Discount"].nunique() > 1 and corr_data["Profit"].nunique() > 1:
+        corr = corr_data.corr().loc["Discount", "Profit"]
+    else:
+        corr = pd.NA
 
     lines = [
         "# Data Mining Findings – Global Superstore",
         "",
         "## 1) Discount-to-Profit Relationship",
-        f"- Correlation between Discount and Profit: **{corr:.4f}**",
+        f"- Correlation between Discount and Profit: **{corr:.4f}**" if pd.notna(corr) else "- Correlation between Discount and Profit: **N/A**",
         "- Profitability by discount bands:",
     ]
     for _, r in discount_effect.iterrows():
@@ -148,7 +158,7 @@ def _write_data_mining_findings(df: pd.DataFrame, output_path: Path) -> None:
 
 def _write_recommendations(df: pd.DataFrame, output_path: Path) -> None:
     high_discount_loss = df[(df["Discount"] >= 0.2) & (df["Profit"] < 0)]
-    hd_share = (high_discount_loss["Sales"].sum() / df["Sales"].sum()) * 100
+    hd_share = _safe_ratio(float(high_discount_loss["Sales"].sum()), float(df["Sales"].sum())) * 100
     avg_ship = df.groupby("Ship Mode", as_index=False)["Ship Days"].mean().sort_values("Ship Days")
     weakest_market = df.groupby("Market", as_index=False)["Profit"].sum().sort_values("Profit").head(3)
 
