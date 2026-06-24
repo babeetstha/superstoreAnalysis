@@ -7,6 +7,9 @@ import pandas as pd
 import plotly.express as px
 from plotly.subplots import make_subplots
 
+DISCOUNT_LOWER_EPSILON = -0.001
+PARETO_THRESHOLD_PCT = 80
+
 
 def _prepare_data(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
@@ -92,7 +95,9 @@ def _write_analytical_report(df: pd.DataFrame, output_path: Path) -> None:
 def _write_data_mining_findings(df: pd.DataFrame, output_path: Path) -> None:
     # Slightly negative lower bound ensures exact 0 discounts are included in the "0%" bucket.
     discount_bins = pd.cut(
-        df["Discount"], bins=[-0.001, 0, 0.1, 0.2, 0.3, 1.0], labels=["0%", "1-10%", "11-20%", "21-30%", ">30%"]
+        df["Discount"],
+        bins=[DISCOUNT_LOWER_EPSILON, 0, 0.1, 0.2, 0.3, 1.0],
+        labels=["0%", "1-10%", "11-20%", "21-30%", ">30%"],
     )
     discount_effect = (
         df.assign(DiscountBand=discount_bins)
@@ -103,7 +108,7 @@ def _write_data_mining_findings(df: pd.DataFrame, output_path: Path) -> None:
 
     product_sales = df.groupby("Product Name", as_index=False)["Sales"].sum().sort_values("Sales", ascending=False)
     product_sales["cum_sales_pct"] = product_sales["Sales"].cumsum() / product_sales["Sales"].sum() * 100
-    pareto_product_count = int((product_sales["cum_sales_pct"] <= 80).sum())
+    pareto_product_count = int((product_sales["cum_sales_pct"] <= PARETO_THRESHOLD_PCT).sum())
 
     segment_profitability = (
         df.groupby("Segment", as_index=False)[["Sales", "Profit"]]
